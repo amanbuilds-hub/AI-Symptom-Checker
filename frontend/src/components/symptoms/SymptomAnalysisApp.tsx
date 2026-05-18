@@ -12,11 +12,36 @@ const SymptomAnalysisApp: React.FC = () => {
   const handleSubmit = async (input: SymptomCheckInput) => {
     setIsAnalyzing(true);
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      // Try to fetch analysis from Grok API on the backend
+      const response = await fetch("http://localhost:5000/api/analyze-symptoms", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(input)
+      });
 
-    const result = analyzeSymptoms(input);
-    setAnalysis(result);
-    setIsAnalyzing(false);
+      if (!response.ok) {
+        throw new Error(`Server returned status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data && data.diagnosis) {
+        setAnalysis(data.diagnosis);
+      } else {
+        throw new Error("Invalid diagnosis payload received from API");
+      }
+    } catch (error) {
+      console.warn("⚠️ Grok AI API Symptom Checker failed or not configured. Falling back to local offline analysis. Error:", error);
+      
+      // Fallback: Use the rule-based local symptom analyzer
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const result = analyzeSymptoms(input);
+      setAnalysis(result);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleBack = () => {

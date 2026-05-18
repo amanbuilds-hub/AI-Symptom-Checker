@@ -53,12 +53,26 @@ const dbAsync = {
         else resolve();
       });
     });
+  },
+  
+  close: () => {
+    return new Promise((resolve, reject) => {
+      db.close((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
   }
 };
 
 // For compatibility with existing code that expects pool.query
 dbAsync.query = (sql, params = []) => {
   return dbAsync.all(sql, params).then(rows => ({ rows }));
+};
+
+dbAsync.end = () => {
+  console.log("Closing SQLite database connection...");
+  return dbAsync.close();
 };
 
 module.exports = dbAsync;
