@@ -11,6 +11,7 @@ const doctorsRoutes = require('./routes/doctors');
 const diagnosisRoute = require('./routes/diagnosis');
 const healthRecordsRoutes = require('./routes/healthRecords');
 const messagesRoutes = require('./routes/messages');
+const analyticsRoutes = require('./routes/analytics');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,7 +23,7 @@ app.use(helmet());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -63,6 +64,7 @@ app.use('/api/appointments', appointmentsRoutes);
 app.use('/api/doctors', doctorsRoutes);
 app.use('/api/health-records', healthRecordsRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api', diagnosisRoute);
 
 // 404 handler

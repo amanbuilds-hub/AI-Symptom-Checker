@@ -87,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const signUp = async (
     email: string,
     password: string,
-    userData: Partial<User>
+    userData: Partial<User> & { license_number?: string }
   ) => {
     try {
       setLoading(true);
@@ -101,6 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         location: userData.location,
         role: userData.role || "customer",
         language: userData.language || "en",
+        license_number: userData.license_number,
       });
 
       if (response.error) {

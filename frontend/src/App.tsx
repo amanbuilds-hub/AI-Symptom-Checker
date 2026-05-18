@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LandingPage from './components/landing/LandingPage';
@@ -7,13 +7,13 @@ import CustomerDashboard from './components/dashboards/CustomerDashboard';
 import DoctorDashboard from './components/dashboards/DoctorDashboard';
 import ManagerDashboard from './components/dashboards/ManagerDashboard';
 import Header from './components/layout/Header';
-import Sidebar from './components/layout/Sidebar';
 import Dashboard from './components/home/Dashboard';
 import SymptomChecker from './components/symptoms/SymptomChecker';
 import DoctorList from './components/doctors/DoctorList';
 import EmergencyServices from './components/emergency/EmergencyServices';
 import './lib/i18n';
 import SymptomAnalysisApp from './components/symptoms/SymptomAnalysisApp';
+import ProfileSettings from './components/profile/ProfileSettings';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -38,21 +38,34 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 const AppContent: React.FC = () => {
   const { user } = useAuth();
   const { theme } = useTheme();
-  const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState('home');
+  const navigate = useNavigate();
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === 'symptoms') {
+      navigate('/QuickConsultant');
+    } else if (tab === 'emergency') {
+      navigate('/EmergencyServices');
+    } else if (tab === 'doctors' || tab === 'profile') {
+      navigate('/app');
+    } else {
+      navigate('/dashboard');
+    }
+  };
 
   const renderDashboard = () => {
     if (!user) return null;
 
     switch (user.role) {
       case 'customer':
-        return <CustomerDashboard />;
+        return <CustomerDashboard activeTab={activeTab} onTabChange={setActiveTab} />;
       case 'doctor':
-        return <DoctorDashboard />;
+        return <DoctorDashboard activeTab={activeTab} onTabChange={setActiveTab} />;
       case 'manager':
         return <ManagerDashboard />;
       default:
-        return <CustomerDashboard />;
+        return <CustomerDashboard activeTab={activeTab} onTabChange={setActiveTab} />;
     }
   };
 
@@ -78,16 +91,7 @@ const AppContent: React.FC = () => {
           </div>
         );
       case 'profile':
-        return (
-          <div className="max-w-4xl mx-auto text-center py-20">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Profile Settings
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Manage your profile and preferences here.
-            </p>
-          </div>
-        );
+        return <ProfileSettings />;
       default:
         return <Dashboard onNavigate={setActiveTab} />;
     }
@@ -98,27 +102,21 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-300">
-      <Header onMenuClick={() => setSidebarOpen(true)} />
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-300 flex flex-col">
+      <Header 
+        onProfileClick={() => handleTabChange('profile')}
+        onHomeClick={() => handleTabChange('home')}
+      />
       
-      <div className="flex">
-        <Sidebar
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
-        
-        <main className="flex-1">
-          <Routes>
-            <Route path="/dashboard" element={renderDashboard()} />
-            <Route path="/app/*" element={renderContent()} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/QuickConsultant" element={<SymptomAnalysisApp />} />
-            <Route path="/EmergencyServices" element={<EmergencyServices />} />
-          </Routes>
-        </main>
-      </div>
+      <main className="flex-1">
+        <Routes>
+          <Route path="/dashboard" element={renderDashboard()} />
+          <Route path="/app/*" element={renderContent()} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/QuickConsultant" element={<SymptomAnalysisApp />} />
+          <Route path="/EmergencyServices" element={<EmergencyServices />} />
+        </Routes>
+      </main>
 
       {/* PWA Features */}
       <div id="install-prompt" className="hidden fixed bottom-4 left-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg z-50">

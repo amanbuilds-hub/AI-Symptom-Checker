@@ -20,6 +20,8 @@ import {
   Plus,
   Phone,
   Mail,
+  Clock,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import Card from "../ui/Card";
@@ -27,9 +29,15 @@ import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import { formatDate } from "../../lib/utils";
 import { Consultation } from "../../types";
-import { appointmentsAPI, healthRecordsAPI } from "../../lib/supabase";
+import { appointmentsAPI, healthRecordsAPI, doctorsAPI } from "../../lib/supabase";
+import { ChatPanel } from "../chat/ChatPanel";
 
-const DoctorDashboard: React.FC = () => {
+interface DoctorDashboardProps {
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
+}
+
+const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ activeTab: propActiveTab, onTabChange }) => {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
 
@@ -43,12 +51,37 @@ const DoctorDashboard: React.FC = () => {
     }
   };
   const [activeTab, setActiveTab] = useState("overview");
+
+  useEffect(() => {
+    if (propActiveTab) {
+      if (propActiveTab === 'home') {
+        setActiveTab('overview');
+      } else if (['overview', 'appointments', 'patients', 'messages'].includes(propActiveTab)) {
+        setActiveTab(propActiveTab);
+      }
+    }
+  }, [propActiveTab]);
+
+  const handleInternalTabChange = (tab: string) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Consultation[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState<string | null>(
     null
   );
+
+  // Schedule states
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [scheduleAvailable, setScheduleAvailable] = useState(true);
+  const [scheduleDays, setScheduleDays] = useState<string[]>(["monday", "tuesday", "wednesday", "thursday", "friday"]);
+  const [scheduleStartTime, setScheduleStartTime] = useState("09:00");
+  const [scheduleEndTime, setScheduleEndTime] = useState("17:00");
+  const [scheduleSlotDuration, setScheduleSlotDuration] = useState<number>(30);
 
   // Patient Health Metrics states
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -66,6 +99,26 @@ const DoctorDashboard: React.FC = () => {
   // Patient Search & Filter states
   const [patientSearchQuery, setPatientSearchQuery] = useState("");
   const [patientStatusFilter, setPatientStatusFilter] = useState("all");
+
+  const [updatingAptId, setUpdatingAptId] = useState<string | null>(null);
+
+  const handleUpdateStatus = async (appointmentId: string, newStatus: 'scheduled' | 'ongoing' | 'completed') => {
+    try {
+      setUpdatingAptId(appointmentId);
+      const response: any = await appointmentsAPI.update(appointmentId, { status: newStatus });
+      if (response.error) {
+        toast.error(`Failed to update status: ${response.error}`);
+      } else {
+        toast.success(`Consultation marked as ${newStatus}!`);
+        await fetchAppointments();
+      }
+    } catch (error) {
+      console.error("Error updating appointment status:", error);
+      toast.error("Failed to update consultation status");
+    } finally {
+      setUpdatingAptId(null);
+    }
+  };
 
   const openMetricsModal = async (patientId: string, patientName: string) => {
     setSelectedPatientId(patientId);
@@ -206,10 +259,68 @@ const DoctorDashboard: React.FC = () => {
     }
   };
 
-  // Fetch appointments from API on component mount
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  const fetchDoctorProfile = async () => {
+    if (!user?.id) return;
+    setLoadingProfile(true);
+    try {
+      const response: any = await doctorsAPI.getById(user.id);
+      if (response.data?.data) {
+        const profile = response.data.data;
+        setScheduleAvailable(profile.available !== false);
+        
+        // Safely parse working hours
+        const workingHours = profile.working_hours || {};
+        setScheduleStartTime(workingHours.start || "09:00");
+        setScheduleEndTime(workingHours.end || "17:00");
+        setScheduleDays(workingHours.days || ["monday", "tuesday", "wednesday", "thursday", "friday"]);
+        setScheduleSlotDuration(workingHours.slotDuration || 30);
+      }
+    } catch (error) {
+      console.error("Error fetching doctor profile:", error);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  const handleSaveSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id) return;
+
+    setIsSavingSchedule(true);
+    try {
+      const response = await doctorsAPI.update(user.id, {
+        available: scheduleAvailable,
+        working_hours: {
+          start: scheduleStartTime,
+          end: scheduleEndTime,
+          days: scheduleDays,
+          slotDuration: scheduleSlotDuration
+        }
+      });
+
+      if (response.error) {
+        toast.error(`Failed to save schedule: ${response.error}`);
+        return;
+      }
+
+      toast.success("Schedule & Availability updated successfully!");
+      setIsScheduleModalOpen(false);
+      await fetchDoctorProfile(); // Refresh locally
+    } catch (error) {
+      console.error("Error updating schedule:", error);
+      toast.error("An error occurred while saving schedule settings");
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  };
+
+  // Fetch appointments and profile on component mount
   useEffect(() => {
     if (user) {
       fetchAppointments();
+      fetchDoctorProfile();
     }
   }, [user]);
 
@@ -374,7 +485,7 @@ const DoctorDashboard: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setActiveTab("appointments")}
+            onClick={() => handleInternalTabChange("appointments")}
           >
             View All
           </Button>
@@ -482,7 +593,28 @@ const DoctorDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex space-x-2 mt-2">
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {appointment.status === "scheduled" && (
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                          disabled={updatingAptId === appointment.id}
+                          onClick={() => handleUpdateStatus(appointment.id, 'ongoing')}
+                        >
+                          {updatingAptId === appointment.id ? "Starting..." : "Start Consultation"}
+                        </Button>
+                      )}
+                      {appointment.status === "ongoing" && (
+                        <Button
+                          size="sm"
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-sm"
+                          disabled={updatingAptId === appointment.id}
+                          onClick={() => handleUpdateStatus(appointment.id, 'completed')}
+                        >
+                          {updatingAptId === appointment.id ? "Completing..." : "Complete Consultation"}
+                        </Button>
+                      )}
+
                       <Button
                         size="sm"
                         onClick={() =>
@@ -524,7 +656,7 @@ const DoctorDashboard: React.FC = () => {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-6 cursor-pointer" hover>
+        <Card className="p-6 cursor-pointer" hover onClick={() => setIsScheduleModalOpen(true)}>
           <div className="flex items-center space-x-4">
             <div className="bg-blue-100 p-3 rounded-full">
               <Calendar className="text-blue-600" size={24} />
@@ -536,26 +668,26 @@ const DoctorDashboard: React.FC = () => {
           </div>
         </Card>
 
-        <Card className="p-6 cursor-pointer" hover>
+        <Card className="p-6 cursor-pointer" hover onClick={() => handleInternalTabChange("messages")}>
           <div className="flex items-center space-x-4">
             <div className="bg-green-100 p-3 rounded-full">
               <MessageCircle className="text-green-600" size={24} />
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">Patient Messages</h3>
-              <p className="text-sm text-gray-600">3 unread messages</p>
+              <p className="text-sm text-gray-600">View active chats</p>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6 cursor-pointer" hover>
+        <Card className="p-6 cursor-pointer" hover onClick={() => setIsAnalyticsModalOpen(true)}>
           <div className="flex items-center space-x-4">
             <div className="bg-purple-100 p-3 rounded-full">
               <TrendingUp className="text-purple-600" size={24} />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">Analytics</h3>
-              <p className="text-sm text-gray-600">View performance</p>
+              <h3 className="font-semibold text-gray-900 dark:text-white">Analytics</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">View performance</p>
             </div>
           </div>
         </Card>
@@ -672,7 +804,28 @@ const DoctorDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex space-x-2">
+                    <div className="flex flex-wrap gap-2">
+                      {appointment.status === "scheduled" && (
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                          disabled={updatingAptId === appointment.id}
+                          onClick={() => handleUpdateStatus(appointment.id, 'ongoing')}
+                        >
+                          {updatingAptId === appointment.id ? "Starting..." : "Start Consultation"}
+                        </Button>
+                      )}
+                      {appointment.status === "ongoing" && (
+                        <Button
+                          size="sm"
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-sm"
+                          disabled={updatingAptId === appointment.id}
+                          onClick={() => handleUpdateStatus(appointment.id, 'completed')}
+                        >
+                          {updatingAptId === appointment.id ? "Completing..." : "Complete Consultation"}
+                        </Button>
+                      )}
+
                       <Button
                         size="sm"
                         onClick={() =>
@@ -838,21 +991,11 @@ const DoctorDashboard: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Doctor Dashboard
-          </h1>
-          <p className="text-gray-600 dark:text-white">Manage your practice and patients</p>
-        </div>
-        <Button
-          variant="ghost"
-          className="border border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-red-900/30 dark:hover:bg-red-950/20 text-red-600 dark:text-red-400 flex items-center justify-center gap-2 self-start sm:self-auto px-4 py-2"
-          onClick={handleLogout}
-        >
-          <LogOut size={16} />
-          <span>{t('logout')}</span>
-        </Button>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Doctor Dashboard
+        </h1>
+        <p className="text-gray-600 dark:text-white">Manage your practice and patients</p>
       </div>
 
       {/* Navigation Tabs */}
@@ -861,13 +1004,14 @@ const DoctorDashboard: React.FC = () => {
           {[
             { id: "overview", label: "Overview", icon: TrendingUp },
             { id: "appointments", label: "Appointments", icon: Calendar },
+            { id: "messages", label: "Messages", icon: MessageCircle },
             { id: "patients", label: "Patients", icon: Users },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleInternalTabChange(tab.id)}
                 className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === tab.id
                     ? "border-blue-500 text-blue-600"
@@ -891,6 +1035,7 @@ const DoctorDashboard: React.FC = () => {
       >
         {activeTab === "overview" && renderOverview()}
         {activeTab === "appointments" && renderAppointments()}
+        {activeTab === "messages" && <ChatPanel userRole="doctor" />}
         {activeTab === "patients" && renderPatients()}
       </motion.div>
 
@@ -1194,6 +1339,248 @@ const DoctorDashboard: React.FC = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Manage Schedule & Availability Modal */}
+      <Modal
+        isOpen={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        title="Manage Clinic Schedule & Availability"
+        size="md"
+      >
+        {loadingProfile ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="text-gray-500 mt-2">Loading schedule settings...</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSaveSchedule} className="space-y-5">
+            {/* Availability Toggle Switch */}
+            <div className="p-4 rounded-xl border border-gray-100 dark:border-gray-750 bg-gray-50 dark:bg-gray-800/35 flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <Shield size={16} className="text-green-500" />
+                  Availability Status
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {scheduleAvailable
+                    ? "Patients can book and schedule online appointments"
+                    : "Temporarily offline. No new bookings accepted"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setScheduleAvailable(!scheduleAvailable)}
+                className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 focus:outline-none ${
+                  scheduleAvailable ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
+                }`}
+              >
+                <div
+                  className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                    scheduleAvailable ? "translate-x-6" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Weekly Working Days Selector */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                Active Weekly Shift Days
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { key: "monday", label: "Mon" },
+                  { key: "tuesday", label: "Tue" },
+                  { key: "wednesday", label: "Wed" },
+                  { key: "thursday", label: "Thu" },
+                  { key: "friday", label: "Fri" },
+                  { key: "saturday", label: "Sat" },
+                  { key: "sunday", label: "Sun" }
+                ].map((day) => {
+                  const isActive = scheduleDays.includes(day.key);
+                  return (
+                    <button
+                      key={day.key}
+                      type="button"
+                      onClick={() => {
+                        if (isActive) {
+                          setScheduleDays(scheduleDays.filter((d) => d !== day.key));
+                        } else {
+                          setScheduleDays([...scheduleDays, day.key]);
+                        }
+                      }}
+                      className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all text-center ${
+                        isActive
+                          ? "bg-blue-50/80 border-blue-300 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 shadow-sm"
+                          : "bg-white border-gray-250 text-gray-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 hover:bg-gray-50"
+                      }`}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {scheduleDays.length === 0 && (
+                <p className="text-xs text-red-500 mt-1">Please select at least one active shift day.</p>
+              )}
+            </div>
+
+            {/* Daily Timings (Start / End) */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
+                  Shift Start Time
+                </label>
+                <div className="relative">
+                  <input
+                    type="time"
+                    required
+                    value={scheduleStartTime}
+                    onChange={(e) => setScheduleStartTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-650 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
+                  Shift End Time
+                </label>
+                <div className="relative">
+                  <input
+                    type="time"
+                    required
+                    value={scheduleEndTime}
+                    onChange={(e) => setScheduleEndTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-650 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Appointment Slot Duration Selector */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                Consultation Slot Duration
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[15, 30, 45, 60].map((dur) => (
+                  <button
+                    key={dur}
+                    type="button"
+                    onClick={() => setScheduleSlotDuration(dur)}
+                    className={`py-2 px-1 rounded-lg text-xs font-bold border transition-all text-center ${
+                      scheduleSlotDuration === dur
+                        ? "bg-purple-50/80 border-purple-300 text-purple-700 dark:bg-purple-950/40 dark:border-purple-800 dark:text-purple-300 shadow-sm"
+                        : "bg-white border-gray-250 text-gray-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 hover:bg-gray-50"
+                    }`}
+                  >
+                    {dur} Min
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 flex items-center gap-1">
+                <Clock size={12} /> Sets the time duration for each video/chat appointment booking slot.
+              </p>
+            </div>
+
+            {/* Actions Form Buttons */}
+            <div className="flex justify-end space-x-2 pt-4 border-t border-gray-100 dark:border-gray-750">
+              <Button type="button" variant="ghost" onClick={() => setIsScheduleModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSavingSchedule || scheduleDays.length === 0}>
+                {isSavingSchedule ? "Saving Settings..." : "Save Schedule"}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Doctor Performance & Earnings Analytics Modal */}
+      <Modal
+        isOpen={isAnalyticsModalOpen}
+        onClose={() => setIsAnalyticsModalOpen(false)}
+        title="My Practice Analytics & Performance"
+        size="lg"
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/20 text-center">
+              <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Today's Visits</p>
+              <p className="text-3xl font-bold text-blue-950 dark:text-white mt-1">{todayAppointments.length}</p>
+            </div>
+            
+            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/20 text-center">
+              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completed Sessions</p>
+              <p className="text-3xl font-bold text-emerald-950 dark:text-white mt-1">{completedConsultations.length}</p>
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-950/20 p-4 rounded-xl border border-yellow-100 dark:border-yellow-900/20 text-center">
+              <p className="text-xs font-semibold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider">Total Earnings</p>
+              <p className="text-3xl font-bold text-yellow-950 dark:text-white mt-1">
+                ₹{((completedConsultations.length) * (user?.doctor_profile?.consultation_fee || 150)).toLocaleString()}
+              </p>
+            </div>
+
+            <div className="bg-purple-50 dark:bg-purple-950/20 p-4 rounded-xl border border-purple-100 dark:border-purple-900/20 text-center">
+              <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Practice Rating</p>
+              <p className="text-3xl font-bold text-purple-950 dark:text-white mt-1">
+                {user?.doctor_profile?.rating ? `${user.doctor_profile.rating}/5` : "4.9/5"}
+              </p>
+            </div>
+          </div>
+
+          {/* Appointment Fulfillment Ratio & Summary */}
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-150 dark:border-gray-700">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Appointment Fulfillment Summary</h4>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-xs font-semibold mb-1">
+                  <span className="text-gray-500 dark:text-gray-400">Completed consultations ratio</span>
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    {appointments.length > 0
+                      ? `${((completedConsultations.length / appointments.length) * 100).toFixed(0)}%`
+                      : "100%"}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${
+                        appointments.length > 0
+                          ? (completedConsultations.length / appointments.length) * 100
+                          : 100
+                      }%`
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs font-semibold mb-1">
+                  <span className="text-gray-500 dark:text-gray-400">Total clinical hours logged</span>
+                  <span className="text-blue-600 dark:text-blue-400">
+                    {((completedConsultations.length * (scheduleSlotDuration || 30)) / 60).toFixed(1)} Hours
+                  </span>
+                </div>
+                <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: "75%" }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={() => setIsAnalyticsModalOpen(false)}>
+              Close Analytics
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

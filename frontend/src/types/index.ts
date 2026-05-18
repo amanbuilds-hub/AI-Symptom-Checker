@@ -73,6 +73,15 @@ export interface Consultation {
   customer_name?: string;
   doctor_name?: string;
   time?: string;
+  specialization?: string;
+  experience?: string;
+  languages?: string[] | string;
+  available?: number | boolean;
+  consultation_fee?: number;
+  license_number?: string;
+  verified?: number | boolean;
+  bio?: string;
+  certifications?: string[] | string;
 }
 
 export interface HealthRecord {

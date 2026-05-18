@@ -23,6 +23,41 @@ function createJitsiLink(meetingId) {
 }
 
 /**
+ * Format appointment with safe JSON parsing and doctor fields
+ */
+function formatAppointment(apt) {
+  if (!apt) return null;
+
+  let languages = ['English'];
+  let certifications = [];
+
+  try {
+    if (apt.languages && apt.languages !== '[object Object]') {
+      languages = JSON.parse(apt.languages);
+    }
+  } catch (e) {
+    console.warn(`Invalid JSON in languages for appointment ${apt.id}:`, apt.languages);
+  }
+
+  try {
+    if (apt.certifications && apt.certifications !== '[object Object]') {
+      certifications = JSON.parse(apt.certifications);
+    }
+  } catch (e) {
+    console.warn(`Invalid JSON in certifications for appointment ${apt.id}:`, apt.certifications);
+  }
+
+  return {
+    ...apt,
+    symptoms: JSON.parse(apt.symptoms || '[]'),
+    languages,
+    certifications,
+    verified: apt.verified === 1,
+    available: apt.available === 1
+  };
+}
+
+/**
  * Create a new appointment
  * POST /api/appointments
  */
@@ -67,19 +102,26 @@ router.post("/", authenticateToken, async (req, res) => {
     const appointment = await db.get(
       `SELECT c.*,
               u_customer.name as customer_name,
-              u_doctor.name as doctor_name
+              u_doctor.name as doctor_name,
+              d.specialization,
+              d.experience,
+              d.languages,
+              d.availability as available,
+              d.rating,
+              d.consultation_fee,
+              d.license_number,
+              d.verified,
+              d.bio,
+              d.certifications
        FROM consultations c
        LEFT JOIN users u_customer ON c.customer_id = u_customer.id
        LEFT JOIN users u_doctor ON c.doctor_id = u_doctor.id
+       LEFT JOIN doctors d ON c.doctor_id = d.id
        WHERE c.id = ?`,
       [consultationId]
     );
 
-    // Prepare response data
-    const responseData = {
-      ...appointment,
-      symptoms: JSON.parse(appointment.symptoms || '[]')
-    };
+    const responseData = formatAppointment(appointment);
 
     res.status(201).json({
       message: "Appointment scheduled successfully",
@@ -107,10 +149,21 @@ router.get("/", authenticateToken, async (req, res) => {
     let query = `
       SELECT c.*,
              u_customer.name as customer_name,
-             u_doctor.name as doctor_name
+             u_doctor.name as doctor_name,
+             d.specialization,
+             d.experience,
+             d.languages,
+             d.availability as available,
+             d.rating,
+             d.consultation_fee,
+             d.license_number,
+             d.verified,
+             d.bio,
+             d.certifications
       FROM consultations c
       LEFT JOIN users u_customer ON c.customer_id = u_customer.id
       LEFT JOIN users u_doctor ON c.doctor_id = u_doctor.id
+      LEFT JOIN doctors d ON c.doctor_id = d.id
       WHERE 1=1
     `;
 
@@ -131,11 +184,7 @@ router.get("/", authenticateToken, async (req, res) => {
 
     const appointments = await db.all(query, params);
 
-    // Parse JSON fields
-    const userAppointments = appointments.map(apt => ({
-      ...apt,
-      symptoms: JSON.parse(apt.symptoms || '[]')
-    }));
+    const userAppointments = appointments.map(formatAppointment);
 
     res.json({
       data: userAppointments,
@@ -159,10 +208,21 @@ router.get("/:id", authenticateToken, async (req, res) => {
     const appointment = await db.get(
       `SELECT c.*,
               u_customer.name as customer_name,
-              u_doctor.name as doctor_name
+              u_doctor.name as doctor_name,
+              d.specialization,
+              d.experience,
+              d.languages,
+              d.availability as available,
+              d.rating,
+              d.consultation_fee,
+              d.license_number,
+              d.verified,
+              d.bio,
+              d.certifications
        FROM consultations c
        LEFT JOIN users u_customer ON c.customer_id = u_customer.id
        LEFT JOIN users u_doctor ON c.doctor_id = u_doctor.id
+       LEFT JOIN doctors d ON c.doctor_id = d.id
        WHERE c.id = ?`,
       [id]
     );
@@ -174,10 +234,10 @@ router.get("/:id", authenticateToken, async (req, res) => {
     }
 
     // Check if user has access to this appointment
-    const userId = req.user.id;
+    const currentUserId = req.user.id;
     const hasAccess =
-      appointment.doctor_id === userId ||
-      appointment.customer_id === userId;
+      appointment.doctor_id === currentUserId ||
+      appointment.customer_id === currentUserId;
 
     if (!hasAccess && req.user.role !== 'manager') {
       return res.status(403).json({
@@ -185,11 +245,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
       });
     }
 
-    // Parse JSON fields
-    const responseData = {
-      ...appointment,
-      symptoms: JSON.parse(appointment.symptoms || '[]')
-    };
+    const responseData = formatAppointment(appointment);
 
     res.json({
       data: responseData,
@@ -250,20 +306,28 @@ router.patch("/:id", authenticateToken, async (req, res) => {
     const updatedAppointment = await db.get(
       `SELECT c.*,
               u_customer.name as customer_name,
-              u_doctor.name as doctor_name
+              u_doctor.name as doctor_name,
+              d.specialization,
+              d.experience,
+              d.languages,
+              d.availability as available,
+              d.rating,
+              d.consultation_fee,
+              d.license_number,
+              d.verified,
+              d.bio,
+              d.certifications
        FROM consultations c
        LEFT JOIN users u_customer ON c.customer_id = u_customer.id
        LEFT JOIN users u_doctor ON c.doctor_id = u_doctor.id
+       LEFT JOIN doctors d ON c.doctor_id = d.id
        WHERE c.id = ?`,
       [id]
     );
 
     res.json({
       message: "Appointment updated successfully",
-      data: {
-        ...updatedAppointment,
-        symptoms: JSON.parse(updatedAppointment.symptoms || '[]')
-      },
+      data: formatAppointment(updatedAppointment),
     });
   } catch (error) {
     console.error("Error updating appointment:", error);

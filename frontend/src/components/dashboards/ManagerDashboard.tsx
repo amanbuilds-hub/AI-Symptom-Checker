@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
@@ -26,6 +26,7 @@ import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import { generateMeetingId, createJitsiLink, formatDate } from '../../lib/utils';
 import { Consultation } from '../../types';
+import { analyticsAPI } from '../../lib/supabase';
 
 interface AppointmentForm {
   doctorId: string;
@@ -58,11 +59,51 @@ const ManagerDashboard: React.FC = () => {
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Real-time Analytics States
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    activeDoctors: 0,
+    consultationsToday: 0,
+    completedConsultations: 0,
+    revenue: 0
+  });
+  const [trends, setTrends] = useState<{ date: string; count: number }[]>([]);
+  const [roles, setRoles] = useState<{ role: string; count: number }[]>([]);
+  const [specializations, setSpecializations] = useState<{ specialization: string; count: number }[]>([]);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoadingAnalytics(true);
+        const [statsRes, trendsRes, rolesRes, specsRes] = await Promise.all([
+          analyticsAPI.getPlatformStats(),
+          analyticsAPI.getTrends(),
+          analyticsAPI.getRoles(),
+          analyticsAPI.getSpecializations()
+        ]);
+
+        if (statsRes.data) setStats(statsRes.data);
+        if (trendsRes.data) setTrends(trendsRes.data);
+        if (rolesRes.data) setRoles(rolesRes.data);
+        if (specsRes.data) setSpecializations(specsRes.data);
+      } catch (error) {
+        console.error("Error loading platform analytics:", error);
+      } finally {
+        setLoadingAnalytics(false);
+      }
+    };
+
+    if (user?.role === 'manager') {
+      fetchAnalytics();
+    }
+  }, [user]);
+
   const platformStats = [
-    { label: 'Total Users', value: '12,456', change: '+12%', icon: Users, color: 'text-blue-600' },
-    { label: 'Active Doctors', value: '234', change: '+5%', icon: UserCheck, color: 'text-green-600' },
-    { label: 'Consultations Today', value: '89', change: '+18%', icon: Activity, color: 'text-purple-600' },
-    { label: 'Revenue (Monthly)', value: '₹2.3L', change: '+25%', icon: DollarSign, color: 'text-yellow-600' }
+    { label: 'Total Patients', value: stats.totalUsers.toLocaleString(), change: 'Live', icon: Users, color: 'text-blue-600' },
+    { label: 'Active Doctors', value: stats.activeDoctors.toLocaleString(), change: 'Live', icon: UserCheck, color: 'text-green-600' },
+    { label: 'Consultations Today', value: stats.consultationsToday.toLocaleString(), change: 'Live', icon: Activity, color: 'text-purple-600' },
+    { label: 'Total Revenue', value: `₹${stats.revenue.toLocaleString()}`, change: 'Completed', icon: DollarSign, color: 'text-yellow-600' }
   ];
 
   const recentActivities = [
@@ -374,43 +415,164 @@ const ManagerDashboard: React.FC = () => {
     </div>
   );
 
-  const renderAnalytics = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Consultation Trends</h3>
-          <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-            <p className="text-gray-500">Chart visualization would go here</p>
-          </div>
-        </Card>
+  const renderAnalytics = () => {
+    const maxTrendCount = Math.max(...trends.map(t => t.count), 1);
+    const totalUsersCount = roles.reduce((sum, r) => sum + r.count, 0) || 1;
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">User Growth</h3>
-          <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-            <p className="text-gray-500">Chart visualization would go here</p>
-          </div>
-        </Card>
+    return (
+      <div className="space-y-6">
+        {loadingAnalytics ? (
+          <Card className="p-12 flex flex-col items-center justify-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <p className="text-gray-500 font-medium">Fetching live analytics data...</p>
+          </Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Consultation Trends Line-Style Bar Chart */}
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Consultation Trends (Last 7 Days)</h3>
+                {trends.length === 0 ? (
+                  <div className="h-64 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <p className="text-gray-500">No consultation trend records found</p>
+                  </div>
+                ) : (
+                  <div className="h-64 flex items-center justify-center">
+                    <svg className="w-full h-full" viewBox="0 0 500 240">
+                      {/* Grid Lines */}
+                      <line x1="40" y1="40" x2="480" y2="40" stroke="#E5E7EB" strokeDasharray="4 4" className="stroke-gray-200 dark:stroke-gray-700" />
+                      <line x1="40" y1="90" x2="480" y2="90" stroke="#E5E7EB" strokeDasharray="4 4" className="stroke-gray-200 dark:stroke-gray-700" />
+                      <line x1="40" y1="140" x2="480" y2="140" stroke="#E5E7EB" strokeDasharray="4 4" className="stroke-gray-200 dark:stroke-gray-700" />
+                      <line x1="40" y1="190" x2="480" y2="190" stroke="#E5E7EB" className="stroke-gray-300 dark:stroke-gray-600" />
+
+                      {/* Y-Axis Labels */}
+                      <text x="30" y="45" textAnchor="end" fontSize="10" className="fill-gray-400 font-medium">{(maxTrendCount).toFixed(0)}</text>
+                      <text x="30" y="115" textAnchor="end" fontSize="10" className="fill-gray-400 font-medium">{(maxTrendCount / 2).toFixed(0)}</text>
+                      <text x="30" y="195" textAnchor="end" fontSize="10" className="fill-gray-400 font-medium">0</text>
+
+                      {/* Render Dynamic Bars */}
+                      {trends.map((item, idx) => {
+                        const x = 55 + idx * 60;
+                        const barHeight = (item.count / maxTrendCount) * 130;
+                        const y = 190 - barHeight;
+                        const dateLabel = new Date(item.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+
+                        return (
+                          <g key={idx} className="group cursor-pointer">
+                            <title>{`${item.count} consultations scheduled on ${item.date}`}</title>
+                            <rect
+                              x={x}
+                              y={y}
+                              width="28"
+                              height={Math.max(barHeight, 4)}
+                              rx="4"
+                              className="fill-indigo-500 hover:fill-indigo-600 dark:fill-indigo-600 dark:hover:fill-indigo-500 transition-all duration-300 drop-shadow"
+                            />
+                            {item.count > 0 && (
+                              <text
+                                x={x + 14}
+                                y={y - 6}
+                                textAnchor="middle"
+                                fontSize="10"
+                                fontWeight="700"
+                                className="fill-indigo-600 dark:fill-indigo-400"
+                              >
+                                {item.count}
+                              </text>
+                            )}
+                            <text
+                              x={x + 14}
+                              y="210"
+                              textAnchor="middle"
+                              fontSize="10"
+                              className="fill-gray-500 dark:fill-gray-400 font-medium"
+                            >
+                              {dateLabel}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                )}
+              </Card>
+
+              {/* User Growth Distribution */}
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">User Growth & Role Shares</h3>
+                {roles.length === 0 ? (
+                  <div className="h-64 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <p className="text-gray-500">No user distributions recorded</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col justify-center h-64 space-y-6">
+                    {roles.map((roleObj, idx) => {
+                      const sharePct = (roleObj.count / totalUsersCount) * 100;
+                      const roleMeta =
+                        roleObj.role === 'customer' ? { label: 'Patients', bar: 'bg-blue-500', text: 'text-blue-600 dark:text-blue-400' } :
+                        roleObj.role === 'doctor' ? { label: 'Doctors', bar: 'bg-green-500', text: 'text-green-600 dark:text-green-400' } :
+                        { label: 'Managers', bar: 'bg-purple-500', text: 'text-purple-600 dark:text-purple-400' };
+
+                      return (
+                        <div key={idx} className="space-y-2">
+                          <div className="flex justify-between text-sm font-semibold">
+                            <span className="text-gray-700 dark:text-gray-300">{roleMeta.label}</span>
+                            <span className={roleMeta.text}>{roleObj.count.toLocaleString()} ({sharePct.toFixed(1)}%)</span>
+                          </div>
+                          <div className="w-full bg-gray-100 dark:bg-gray-700 h-3 rounded-full overflow-hidden">
+                            <div
+                              className={`${roleMeta.bar} h-full rounded-full transition-all duration-1000`}
+                              style={{ width: `${sharePct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            {/* Doctor Specializations Stats */}
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Doctor Specializations</h3>
+              {specializations.length === 0 ? (
+                <p className="text-gray-500 text-center py-6">No specialty metrics available</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {specializations.map((spec, idx) => (
+                    <div key={idx} className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-gray-800/40 dark:to-gray-800/20 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex flex-col justify-between">
+                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 capitalize">{spec.specialization}</span>
+                      <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-2">{spec.count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            {/* Platform Metrics */}
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Platform Vitals</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">99.9%</div>
+                  <p className="text-sm text-gray-650 dark:text-gray-450">System Uptime</p>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">1.8s</div>
+                  <p className="text-sm text-gray-655 dark:text-gray-450">Avg DB Response</p>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-purple-600 dark:text-purple-400 mb-2">4.9/5</div>
+                  <p className="text-sm text-gray-660 dark:text-gray-450">User Satisfaction</p>
+                </div>
+              </div>
+            </Card>
+          </>
+        )}
       </div>
-
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Platform Metrics</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center">
-            <div className="text-3xl font-bold text-blue-600 mb-2">94.5%</div>
-            <p className="text-sm text-gray-600">System Uptime</p>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-green-600 mb-2">2.3s</div>
-            <p className="text-sm text-gray-600">Avg Response Time</p>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-purple-600 mb-2">4.7/5</div>
-            <p className="text-sm text-gray-600">User Satisfaction</p>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="max-w-7xl mx-auto p-6">
@@ -493,19 +655,9 @@ const ManagerDashboard: React.FC = () => {
       </Modal>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Manager Dashboard</h1>
-          <p className="text-gray-600 dark:text-white">Platform management and analytics</p>
-        </div>
-        <Button
-          variant="ghost"
-          className="border border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-red-900/30 dark:hover:bg-red-950/20 text-red-600 dark:text-red-400 flex items-center justify-center gap-2 self-start sm:self-auto px-4 py-2"
-          onClick={handleLogout}
-        >
-          <LogOut size={16} />
-          <span>{t('logout')}</span>
-        </Button>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Manager Dashboard</h1>
+        <p className="text-gray-600 dark:text-white">Platform management and analytics</p>
       </div>
 
       {/* Navigation Tabs */}

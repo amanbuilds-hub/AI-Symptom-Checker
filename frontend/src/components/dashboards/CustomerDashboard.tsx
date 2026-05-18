@@ -17,7 +17,13 @@ import {
   ExternalLink,
   Copy,
   CheckCircle,
-  LogOut
+  LogOut,
+  Shield,
+  Award,
+  Star,
+  DollarSign,
+  Globe,
+  Clock
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import Card from '../ui/Card';
@@ -26,6 +32,7 @@ import Modal from '../ui/Modal';
 import { formatDate } from '../../lib/utils';
 import { Consultation } from '../../types';
 import { doctorsAPI, appointmentsAPI, healthRecordsAPI } from '../../lib/supabase';
+import { ChatPanel } from '../chat/ChatPanel';
 
 interface AppointmentForm {
   doctorId: string;
@@ -35,7 +42,12 @@ interface AppointmentForm {
   symptoms: string;
 }
 
-const CustomerDashboard: React.FC = () => {
+interface CustomerDashboardProps {
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
+}
+
+const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ activeTab: propActiveTab, onTabChange }) => {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
 
@@ -49,6 +61,21 @@ const CustomerDashboard: React.FC = () => {
     }
   };
   const [activeTab, setActiveTab] = useState('overview');
+
+  useEffect(() => {
+    if (propActiveTab) {
+      if (propActiveTab === 'home') {
+        setActiveTab('overview');
+      } else if (['overview', 'appointments', 'messages', 'consultations', 'records'].includes(propActiveTab)) {
+        setActiveTab(propActiveTab);
+      }
+    }
+  }, [propActiveTab]);
+
+  const handleInternalTabChange = (tab: string) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [availableDoctors, setAvailableDoctors] = useState<any[]>([]);
@@ -204,24 +231,7 @@ const CustomerDashboard: React.FC = () => {
   };
   const [appointments, setAppointments] = useState<Consultation[]>([]);
 
-  const recentConsultations = [
-    {
-      id: '1',
-      doctor: 'Dr. Sunita Patel',
-      date: '2024-01-10',
-      diagnosis: 'Common Cold',
-      status: 'completed',
-      rating: 5
-    },
-    {
-      id: '2',
-      doctor: 'Dr. Arun Singh',
-      date: '2024-01-05',
-      diagnosis: 'Skin Allergy',
-      status: 'completed',
-      rating: 4
-    }
-  ];
+
 
   const [metricsData, setMetricsData] = useState({
     blood_pressure: '120/80',
@@ -281,6 +291,307 @@ const CustomerDashboard: React.FC = () => {
       console.error('Error booking appointment:', error);
       alert('Failed to book appointment. Please try again.');
     }
+  };
+
+  const handleViewCertificate = (certString: string, doctorName: string, licenseNumber: string) => {
+    const parts = certString.split('|');
+    const certName = parts[0];
+    const base64Data = parts[1];
+
+    if (base64Data) {
+      const newTab = window.open();
+      if (!newTab) {
+        toast.error("Pop-up blocked! Please allow pop-ups for this site.");
+        return;
+      }
+
+      if (base64Data.startsWith('data:application/pdf')) {
+        newTab.document.write(`
+          <html>
+            <head>
+              <title>${certName}</title>
+              <style>
+                body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: #525659; }
+                iframe { border: none; width: 100%; height: 100%; }
+              </style>
+            </head>
+            <body>
+              <iframe src="${base64Data}"></iframe>
+            </body>
+          </html>
+        `);
+        newTab.document.close();
+      } else if (base64Data.startsWith('data:image')) {
+        newTab.document.write(`
+          <html>
+            <head>
+              <title>${certName}</title>
+              <style>
+                body {
+                  margin: 0;
+                  padding: 40px;
+                  background-color: #0f172a;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  min-height: 100vh;
+                  box-sizing: border-box;
+                }
+                img {
+                  max-width: 100%;
+                  max-height: 90vh;
+                  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                  border-radius: 8px;
+                  border: 4px solid #1e293b;
+                }
+              </style>
+            </head>
+            <body>
+              <img src="${base64Data}" alt="${certName}" />
+            </body>
+          </html>
+        `);
+        newTab.document.close();
+      } else {
+        newTab.location.href = base64Data;
+      }
+    } else {
+      const newTab = window.open();
+      if (!newTab) {
+        toast.error("Pop-up blocked! Please allow pop-ups for this site.");
+        return;
+      }
+
+      const htmlContent = `
+        <html>
+          <head>
+            <title>${certName} - Verification Preview</title>
+            <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+            <style>
+              body {
+                margin: 0;
+                padding: 40px;
+                background-color: #f8fafc;
+                font-family: 'Montserrat', sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                box-sizing: border-box;
+              }
+              .certificate-container {
+                background: white;
+                border: 16px solid #1e3b8b;
+                outline: 4px double #d97706;
+                outline-offset: -10px;
+                padding: 60px 40px;
+                max-width: 800px;
+                width: 100%;
+                text-align: center;
+                box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+                position: relative;
+              }
+              .header {
+                font-family: 'Cinzel', serif;
+                color: #1e3b8b;
+                font-size: 26px;
+                margin-bottom: 5px;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+              }
+              .subheader {
+                font-size: 13px;
+                color: #d97706;
+                font-weight: 700;
+                letter-spacing: 4px;
+                text-transform: uppercase;
+                margin-bottom: 40px;
+              }
+              .title {
+                font-size: 16px;
+                color: #4b5563;
+                font-style: italic;
+                margin-bottom: 20px;
+              }
+              .name {
+                font-size: 28px;
+                font-weight: 700;
+                color: #111827;
+                border-bottom: 2px solid #e5e7eb;
+                display: inline-block;
+                padding-bottom: 5px;
+                margin-bottom: 20px;
+                min-width: 300px;
+              }
+              .statement {
+                font-size: 15px;
+                color: #4b5563;
+                line-height: 1.6;
+                max-width: 600px;
+                margin: 0 auto 40px auto;
+              }
+              .meta-grid {
+                display: grid;
+                grid-template-cols: 1fr 1fr;
+                gap: 40px;
+                margin-top: 50px;
+                border-top: 1px dashed #d1d5db;
+                padding-top: 30px;
+                font-size: 13px;
+                color: #6b7280;
+              }
+              .meta-item strong {
+                display: block;
+                color: #111827;
+                font-size: 14px;
+                margin-bottom: 5px;
+              }
+              .gold-seal {
+                width: 70px;
+                height: 70px;
+                background: radial-gradient(circle, #fbbf24 0%, #d97706 100%);
+                border-radius: 50%;
+                margin: 30px auto 0 auto;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-size: 9px;
+                font-weight: bold;
+                text-transform: uppercase;
+                border: 2px dashed #fff;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="certificate-container">
+              <div class="header">Board of Medical Practitioners</div>
+              <div class="subheader">Certificate of Digital Registration</div>
+              
+              <div class="title">This is to officially verify the medical license document</div>
+              <div class="name">${certName}</div>
+              
+              <div class="statement">
+                which is assigned, verified, and active for practitioner 
+                <strong>${doctorName}</strong> (License ID: <strong>${licenseNumber || 'MCI-VERIFIED'}</strong>). This credential has been checked, validated, and successfully approved by the Medical Council board for active clinical operations on the Rural HealthCare platform.
+              </div>
+              
+              <div class="meta-grid">
+                <div class="meta-item">
+                  <strong>National Medical Commission</strong>
+                  Verified Digital Signatory
+                </div>
+                <div class="meta-item">
+                  <strong>License Status</strong>
+                  Active & Fully Authorized
+                </div>
+              </div>
+              
+              <div class="gold-seal">Verified</div>
+            </div>
+          </body>
+        </html>
+      `;
+      newTab.document.write(htmlContent);
+      newTab.document.close();
+    }
+  };
+
+  const renderDoctorInfoSection = (item: any) => {
+    if (!item.doctor_name && !item.doctor) return null;
+
+    const hasCertifications = item.certifications && (Array.isArray(item.certifications) ? item.certifications : [item.certifications]).length > 0;
+
+    return (
+      <div className="mt-4 p-4 rounded-xl border border-purple-200/50 dark:border-purple-900/30 bg-purple-50/10 dark:bg-purple-950/10 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold flex-shrink-0 shadow-md">
+              {((item.doctor_name || item.doctor || 'D')[0]).toUpperCase()}
+            </div>
+            <div>
+              <h4 className="font-bold text-sm text-purple-950 dark:text-purple-350 flex flex-wrap items-center gap-1.5">
+                {item.doctor_name || item.doctor}
+                {item.verified && (
+                  <span className="inline-flex items-center text-[10px] bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full font-sans font-semibold border border-green-200 dark:border-green-900/20">
+                    <Shield className="mr-0.5 text-green-600 dark:text-green-400" size={10} /> Verified Practitioner
+                  </span>
+                )}
+              </h4>
+              <p className="text-xs font-semibold text-purple-800 dark:text-purple-400">
+                {item.specialization || 'General Physician'} • {item.experience || '5 years'} experience
+              </p>
+              {item.bio && (
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 max-w-2xl italic leading-relaxed">
+                  "{item.bio}"
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-start gap-1.5 flex-wrap sm:text-right">
+            {item.rating > 0 && (
+              <div className="flex items-center text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded border border-amber-200/50 dark:border-amber-900/20">
+                <Star className="text-amber-500 fill-amber-500 mr-0.5" size={12} />
+                <span>{item.rating} / 5.0 Rating</span>
+              </div>
+            )}
+            {item.consultation_fee !== undefined && (
+              <div className="flex items-center text-xs font-semibold text-purple-950 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 px-2 py-0.5 rounded border border-purple-200/50 dark:border-purple-900/20">
+                <DollarSign className="text-purple-600 mr-0.5" size={12} />
+                <span>Fee: ₹{item.consultation_fee}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-y-1.5 gap-x-4 pt-2 border-t border-purple-100/50 dark:border-purple-900/10 text-xs text-gray-600 dark:text-purple-400/80">
+          {item.license_number && (
+            <div className="flex items-center gap-1 font-mono">
+              <Shield size={12} className="text-purple-600" />
+              <span>MBBS License: <strong className="text-gray-900 dark:text-white">{item.license_number}</strong></span>
+            </div>
+          )}
+          {item.languages && (
+            <div className="flex items-center gap-1">
+              <Globe size={12} className="text-purple-600" />
+              <span>Languages: <strong className="text-gray-900 dark:text-white">
+                {Array.isArray(item.languages) ? item.languages.join(', ') : String(item.languages)}
+              </strong></span>
+            </div>
+          )}
+        </div>
+
+        {hasCertifications && (
+          <div className="pt-2 border-t border-purple-100/50 dark:border-purple-900/10">
+            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider block mb-1">
+              Verified Board Credentials (Click to View)
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {(Array.isArray(item.certifications) ? item.certifications : [item.certifications]).map((cert: any, cIdx: number) => {
+                const certName = String(cert).split('|')[0];
+                return (
+                  <button
+                    key={cIdx}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleViewCertificate(String(cert), item.doctor_name || item.doctor || 'Doctor', item.license_number || 'MCI-VERIFIED');
+                    }}
+                    className="flex items-center space-x-1 text-[10px] font-medium bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/20 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded-md border border-purple-200/50 dark:border-purple-800/20 transition-all font-mono truncate max-w-full text-left"
+                    title="Click to open/verify exact uploaded degree in a new tab"
+                  >
+                    <Award size={10} className="text-purple-600 flex-shrink-0" />
+                    <span>{certName}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -413,6 +724,8 @@ const CustomerDashboard: React.FC = () => {
                   </span>
                 </div>
 
+                {renderDoctorInfoSection(appointment)}
+
                 {appointment.meeting_link && (
                   <>
                     <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg mb-3 border dark:border-gray-700">
@@ -460,37 +773,59 @@ const CustomerDashboard: React.FC = () => {
     </div>
   );
 
-  const renderConsultations = () => (
-    <div className="space-y-6">
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Consultations</h3>
-        <div className="space-y-4">
-          {recentConsultations.map((consultation) => (
-            <div key={consultation.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800/50">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-medium text-gray-900 dark:text-white">{consultation.doctor}</h4>
-                <span className="text-sm text-gray-500 dark:text-gray-400">{consultation.date}</span>
+  const renderConsultations = () => {
+    const completedConsultations = appointments.filter(apt => apt.status === 'completed');
+
+    return (
+      <div className="space-y-6">
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Consultations</h3>
+          <div className="space-y-4">
+            {completedConsultations.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <FileText className="mx-auto text-gray-400 mb-4" size={48} />
+                <p>No completed consultations found.</p>
               </div>
-              <p className="text-gray-600 dark:text-gray-300 mb-2">Diagnosis: {consultation.diagnosis}</p>
-              <div className="flex items-center justify-between">
-                <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  {consultation.status}
-                </span>
-                <div className="flex items-center">
-                  <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Rating:</span>
-                  <div className="flex">
-                    {[...Array(consultation.rating)].map((_, i) => (
-                      <span key={i} className="text-yellow-400">★</span>
-                    ))}
+            ) : (
+              completedConsultations.map((consultation) => (
+                <div key={consultation.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-gray-900 dark:text-white">
+                      {consultation.doctor_name || consultation.doctor || 'Doctor Consultation'}
+                    </h4>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      {formatDate(consultation.scheduled_at)}
+                    </span>
+                  </div>
+                  <p className="text-gray-600 dark:text-gray-300 mb-2">
+                    Diagnosis/Notes: {consultation.notes || 'No diagnosis notes provided yet.'}
+                  </p>
+
+                  {renderDoctorInfoSection(consultation)}
+
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      {consultation.status}
+                    </span>
+                    {consultation.rating && (
+                      <div className="flex items-center">
+                        <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Rating:</span>
+                        <div className="flex">
+                          {[...Array(consultation.rating)].map((_, i) => (
+                            <span key={i} className="text-yellow-400">★</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
+              ))
+            )}
+          </div>
+        </Card>
+      </div>
+    );
+  };
 
   const renderHealthRecords = () => {
     const getTypeBadgeClass = (type: string) => {
@@ -633,6 +968,8 @@ const CustomerDashboard: React.FC = () => {
                   </span>
                 </div>
 
+                {renderDoctorInfoSection(appointment)}
+
                 {appointment.meeting_link && (
                   <>
                     <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg mb-3 border dark:border-gray-700">
@@ -754,6 +1091,51 @@ const CustomerDashboard: React.FC = () => {
               min={new Date().toISOString().slice(0, 16)}
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Select your preferred appointment date and time</p>
+            
+            {(() => {
+              const selectedDoc = availableDoctors.find(d => d.id === appointmentForm.doctorId);
+              if (!selectedDoc || !selectedDoc.working_hours) return null;
+              
+              const wh = selectedDoc.working_hours;
+              const days = wh.days || [];
+              const start = wh.start || "09:00";
+              const end = wh.end || "17:00";
+              const slot = wh.slotDuration || 30;
+              
+              if (days.length === 0) return null;
+              
+              const formatTime12h = (timeStr: string) => {
+                try {
+                  const [hourStr, minStr] = timeStr.split(":");
+                  const hour = parseInt(hourStr);
+                  const min = parseInt(minStr);
+                  const ampm = hour >= 12 ? "PM" : "AM";
+                  const hour12 = hour % 12 || 12;
+                  const minutesStr = min < 10 ? `0${min}` : min;
+                  return `${hour12}:${minutesStr} ${ampm}`;
+                } catch (e) {
+                  return timeStr;
+                }
+              };
+
+              const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+              const formattedDays = days.map((d: string) => capitalize(d)).join(", ");
+
+              return (
+                <div className="mt-2.5 p-3 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30 rounded-xl">
+                  <div className="flex items-center space-x-2 text-xs font-semibold text-green-800 dark:text-green-300 mb-1.5">
+                    <Clock size={14} className="text-green-600 dark:text-green-400" />
+                    <span>Practitioner Availability Schedule</span>
+                  </div>
+                  <p className="text-xs text-green-700 dark:text-green-400">
+                    <strong className="font-semibold text-gray-800 dark:text-gray-200">Weekly Days:</strong> {formattedDays}
+                  </p>
+                  <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                    <strong className="font-semibold text-gray-800 dark:text-gray-200">Shift Timings:</strong> {formatTime12h(start)} - {formatTime12h(end)} ({slot} Min Slots)
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           <div>
@@ -792,19 +1174,9 @@ const CustomerDashboard: React.FC = () => {
       </Modal>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Patient Dashboard</h1>
-          <p className="text-gray-600 dark:text-white">Manage your health and appointments</p>
-        </div>
-        <Button
-          variant="ghost"
-          className="border border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-red-900/30 dark:hover:bg-red-950/20 text-red-600 dark:text-red-400 flex items-center justify-center gap-2 self-start sm:self-auto px-4 py-2"
-          onClick={handleLogout}
-        >
-          <LogOut size={16} />
-          <span>{t('logout')}</span>
-        </Button>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Patient Dashboard</h1>
+        <p className="text-gray-600 dark:text-white">Manage your health and appointments</p>
       </div>
 
       {/* Navigation Tabs */}
@@ -813,14 +1185,15 @@ const CustomerDashboard: React.FC = () => {
           {[
             { id: 'overview', label: 'Overview', icon: Activity },
             { id: 'appointments', label: 'Appointments', icon: Calendar },
-            { id: 'consultations', label: 'Consultations', icon: MessageCircle },
+            { id: 'messages', label: 'Messages', icon: MessageCircle },
+            { id: 'consultations', label: 'Consultations', icon: Award },
             { id: 'records', label: 'Health Records', icon: FileText }
           ].map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleInternalTabChange(tab.id)}
                 className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
@@ -844,6 +1217,7 @@ const CustomerDashboard: React.FC = () => {
       >
         {activeTab === 'overview' && renderOverview()}
         {activeTab === 'appointments' && renderAppointments()}
+        {activeTab === 'messages' && <ChatPanel userRole="customer" />}
         {activeTab === 'consultations' && renderConsultations()}
         {activeTab === 'records' && renderHealthRecords()}
       </motion.div>

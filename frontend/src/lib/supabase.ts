@@ -74,6 +74,13 @@ class ApiClient {
     });
   }
 
+  async patch<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: "PATCH",
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { method: "DELETE" });
   }
@@ -93,6 +100,7 @@ export const authAPI = {
     language?: string;
     location?: string;
     role?: string;
+    license_number?: string;
   }) => {
     const response = await apiClient.post("/auth/signup", userData);
     if (response.data?.token) {
@@ -145,7 +153,7 @@ export const appointmentsAPI = {
   },
 
   update: async (id: string, data: { status?: string; notes?: string }) => {
-    return apiClient.put(`/appointments/${id}`, data);
+    return apiClient.patch(`/appointments/${id}`, data);
   },
 
   cancel: async (id: string) => {
@@ -183,7 +191,23 @@ export const doctorsAPI = {
     return apiClient.post("/doctors", doctorData);
   },
 
-  update: async (id: string, data: { available?: boolean; rating?: number }) => {
+  update: async (
+    id: string,
+    data: {
+      available?: boolean;
+      rating?: number;
+      consultation_fee?: number;
+      bio?: string;
+      specialization?: string;
+      experience?: number;
+      working_hours?: {
+        start: string;
+        end: string;
+        days: string[];
+        slotDuration?: number;
+      };
+    }
+  ) => {
     return apiClient.put(`/doctors/${id}`, data);
   },
 
@@ -252,6 +276,31 @@ export const messagesAPI = {
 
   sendMessage: async (consultationId: string, content: string, messageType: 'text' | 'image' | 'file' = 'text') => {
     return apiClient.post(`/messages/consultation/${consultationId}`, { content, message_type: messageType });
+  }
+};
+
+// Analytics API functions
+export const analyticsAPI = {
+  getPlatformStats: async () => {
+    return apiClient.get<{
+      totalUsers: number;
+      activeDoctors: number;
+      consultationsToday: number;
+      completedConsultations: number;
+      revenue: number;
+    }>("/analytics/platform-stats");
+  },
+
+  getTrends: async () => {
+    return apiClient.get<{ date: string; count: number }[]>("/analytics/trends");
+  },
+
+  getRoles: async () => {
+    return apiClient.get<{ role: string; count: number }[]>("/analytics/roles");
+  },
+
+  getSpecializations: async () => {
+    return apiClient.get<{ specialization: string; count: number }[]>("/analytics/specializations");
   }
 };
 

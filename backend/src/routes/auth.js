@@ -12,9 +12,10 @@ const signupValidation = [
   body("password").isLength({ min: 6 }),
   body("name").trim().isLength({ min: 2 }),
   body("phone").optional().isMobilePhone(),
-  body("role").optional().isIn(["customer", "doctor"]),
+  body("role").optional().isIn(["customer", "doctor", "manager"]),
   body("language").optional().isIn(["en", "hi"]),
   body("location").optional().trim().isLength({ min: 2 }),
+  body("license_number").optional().trim()
 ];
 
 const signinValidation = [
@@ -33,12 +34,20 @@ router.post("/signup", signupValidation, async (req, res) => {
       });
     }
 
-    const { email, password, name, phone, age, gender, language = "en", location, role = "customer" } = req.body;
+    const { email, password, name, phone, age, gender, language = "en", location, role = "customer", license_number } = req.body;
 
     // Check if user already exists
     const existingUser = await db.get("SELECT id FROM users WHERE email = ?", [email]);
     if (existingUser) {
       return res.status(409).json({ error: "User already exists" });
+    }
+
+    // Check if license number is unique for doctors
+    if (role === "doctor" && license_number) {
+      const existingLicense = await db.get("SELECT id FROM doctors WHERE license_number = ?", [license_number]);
+      if (existingLicense) {
+        return res.status(409).json({ error: "Medical License Number already registered" });
+      }
     }
 
     // Hash password
@@ -59,14 +68,15 @@ router.post("/signup", signupValidation, async (req, res) => {
     // If doctor → create doctor profile
     if (role === "doctor") {
       const doctorQuery = `
-        INSERT INTO doctors (id, specialization, experience, languages)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO doctors (id, specialization, experience, languages, license_number)
+        VALUES (?, ?, ?, ?, ?)
       `;
       await db.run(doctorQuery, [
         user.id,
         "General Practice", // default specialization
         0, // default experience
         JSON.stringify([language]),
+        license_number || null
       ]);
     }
 
@@ -175,6 +185,12 @@ router.put(
     body("gender").optional().isIn(["male", "female", "other"]),
     body("language").optional().isIn(["en", "hi"]),
     body("location").optional().trim().isLength({ min: 2 }),
+    // Doctor-specific fields
+    body("specialization").optional().trim(),
+    body("experience").optional().isInt({ min: 0 }),
+    body("consultation_fee").optional().isInt({ min: 0 }),
+    body("bio").optional().trim(),
+    body("certifications").optional().isArray(),
   ],
   async (req, res) => {
     try {
@@ -189,22 +205,49 @@ router.put(
         if (req.body[f] !== undefined) updates[f] = req.body[f];
       });
 
-      if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ error: "No valid fields to update" });
+      // Update users table if there are changes
+      if (Object.keys(updates).length > 0) {
+        const setClause = Object.keys(updates).map((key) => `${key} = ?`).join(", ");
+        const values = [...Object.values(updates), req.user.id];
+        await db.run(
+          `UPDATE users SET ${setClause}, updated_at = datetime('now') WHERE id = ?`,
+          values
+        );
       }
 
-      const setClause = Object.keys(updates).map((key) => `${key} = ?`).join(", ");
-      const values = [...Object.values(updates), req.user.id];
+      // Update doctors table if the user is a doctor and doctor-specific fields are provided
+      if (req.user.role === "doctor") {
+        const doctorFields = ["specialization", "experience", "consultation_fee", "bio", "certifications"];
+        const docUpdates = {};
+        doctorFields.forEach((f) => {
+          if (req.body[f] !== undefined) {
+            if (f === "certifications") {
+              docUpdates[f] = JSON.stringify(req.body[f]);
+            } else {
+              docUpdates[f] = req.body[f];
+            }
+          }
+        });
 
-      await db.run(
-        `UPDATE users SET ${setClause}, updated_at = datetime('now') WHERE id = ?`,
-        values
-      );
+        if (Object.keys(docUpdates).length > 0) {
+          const setClauseDoc = Object.keys(docUpdates).map((key) => `${key} = ?`).join(", ");
+          const valuesDoc = [...Object.values(docUpdates), req.user.id];
+          await db.run(
+            `UPDATE doctors SET ${setClauseDoc}, updated_at = datetime('now') WHERE id = ?`,
+            valuesDoc
+          );
+        }
+      }
 
       const updatedUser = await db.get(
         "SELECT id, email, name, phone, age, gender, language, location, role, avatar_url, updated_at FROM users WHERE id = ?",
         [req.user.id]
       );
+
+      if (updatedUser.role === "doctor") {
+        const doctorProfile = await db.get("SELECT * FROM doctors WHERE id = ?", [updatedUser.id]);
+        if (doctorProfile) updatedUser.doctor_profile = doctorProfile;
+      }
 
       res.json({ message: "Profile updated successfully", user: updatedUser });
     } catch (error) {

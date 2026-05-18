@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { 
   Home, 
   Stethoscope, 
@@ -9,7 +10,8 @@ import {
   AlertTriangle, 
   User,
   X,
-  LogOut
+  LogOut,
+  Calendar
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -21,15 +23,6 @@ interface SidebarProps {
   onTabChange: (tab: string) => void;
 }
 
-const menuItems = [
-  { id: 'home', icon: Home, key: 'home' },
-  { id: 'symptoms', icon: Stethoscope, key: 'symptoms' },
-  { id: 'doctors', icon: Users, key: 'doctors' },
-  { id: 'records', icon: FileText, key: 'records' },
-  { id: 'emergency', icon: AlertTriangle, key: 'emergency' },
-  { id: 'profile', icon: User, key: 'profile' },
-];
-
 const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
@@ -37,7 +30,33 @@ const Sidebar: React.FC<SidebarProps> = ({
   onTabChange
 }) => {
   const { t } = useTranslation();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const getMenuItems = () => {
+    if (!user) return [];
+    
+    if (user.role === 'doctor') {
+      return [
+        { id: 'home', icon: Home, label: 'Dashboard' },
+        { id: 'appointments', icon: Calendar, label: 'My Appointments' },
+        { id: 'patients', icon: Users, label: 'Patients Folder' },
+        { id: 'profile', icon: User, label: 'Profile' },
+      ];
+    }
+    
+    // Default patient / customer menu items
+    return [
+      { id: 'home', icon: Home, label: 'Home' },
+      { id: 'symptoms', icon: Stethoscope, label: 'Check Symptoms' },
+      { id: 'doctors', icon: Users, label: 'Find Doctors' },
+      { id: 'records', icon: FileText, label: 'Health Records' },
+      { id: 'emergency', icon: AlertTriangle, label: 'Emergency' },
+      { id: 'profile', icon: User, label: 'Profile' },
+    ];
+  };
+
+  const menuItems = getMenuItems();
 
   const handleLogout = async () => {
     try {
@@ -94,7 +113,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         }`}
                       >
                         <Icon size={20} />
-                        <span className="font-medium">{t(item.key)}</span>
+                        <span className="font-medium">{t(item.id) || item.label}</span>
                       </button>
                     </li>
                   );

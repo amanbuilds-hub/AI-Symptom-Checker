@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../ui/Button';
 import toast from 'react-hot-toast';
@@ -17,6 +17,11 @@ const schema = yup.object({
   role: yup.string().oneOf(['customer', 'doctor']).required('Role is required'),
   location: yup.string().required('Location is required'),
   language: yup.string().required('Language is required'),
+  license_number: yup.string().when('role', {
+    is: 'doctor',
+    then: (s) => s.required('Medical License Number is required for verification'),
+    otherwise: (s) => s.notRequired(),
+  }),
 });
 
 interface SignupFormProps {
@@ -156,6 +161,30 @@ const SignupForm: React.FC<SignupFormProps> = ({ onToggleMode, onClose }) => {
             )}
           </div>
         </div>
+
+        {selectedRole === 'doctor' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="space-y-1"
+          >
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Medical License Number (MBBS / Registration ID) <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                {...register('license_number')}
+                type="text"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g. MCI-12345"
+              />
+            </div>
+            {errors.license_number && (
+              <p className="mt-1 text-sm text-red-600">{errors.license_number.message}</p>
+            )}
+          </motion.div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">

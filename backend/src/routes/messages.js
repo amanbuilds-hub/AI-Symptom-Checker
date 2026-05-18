@@ -3,6 +3,24 @@ const router = express.Router();
 const { authenticateToken } = require("../middleware/auth");
 const db = require("../config/database");
 
+// Automatically prune messages older than 7 days to enforce retention policy
+const pruneOldMessages = async () => {
+  try {
+    const result = await db.run(
+      "DELETE FROM messages WHERE created_at < datetime('now', '-7 days')"
+    );
+    if (result && result.changes > 0) {
+      console.log(`[Scheduler] Pruned ${result.changes} messages older than 7 days from the database.`);
+    }
+  } catch (err) {
+    console.error("[Scheduler] Error pruning expired messages:", err);
+  }
+};
+
+// Run pruning on backend startup and repeat every hour
+pruneOldMessages();
+setInterval(pruneOldMessages, 1000 * 60 * 60);
+
 /**
  * Get all conversations (active chats) for the current logged-in user
  * GET /api/messages/conversations
@@ -14,28 +32,48 @@ router.get("/conversations", authenticateToken, async (req, res) => {
 
     let query = "";
     if (userRole === "doctor") {
-      // Find all consultations for this doctor, join patient name
+      // Find the latest active/scheduled consultation for each distinct customer (patient)
       query = `
         SELECT c.id as consultation_id, c.scheduled_at, c.status,
                u.id as other_user_id, u.name as other_user_name, u.email as other_user_email,
-               (SELECT content FROM messages WHERE consultation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
-               (SELECT created_at FROM messages WHERE consultation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time
+               (SELECT content FROM messages WHERE consultation_id = c.id AND created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 1) as last_message,
+               (SELECT created_at FROM messages WHERE consultation_id = c.id AND created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 1) as last_message_time
         FROM consultations c
         JOIN users u ON c.customer_id = u.id
         WHERE c.doctor_id = ?
-        ORDER BY last_message_time DESC, c.scheduled_at DESC
+          AND c.id = (
+            SELECT c2.id
+            FROM consultations c2
+            WHERE c2.customer_id = c.customer_id AND c2.doctor_id = c.doctor_id
+            ORDER BY COALESCE(
+              (SELECT created_at FROM messages WHERE consultation_id = c2.id AND created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 1),
+              c2.scheduled_at
+            ) DESC
+            LIMIT 1
+          )
+        ORDER BY COALESCE(last_message_time, c.scheduled_at) DESC
       `;
     } else {
-      // Find all consultations for this customer/patient, join doctor name
+      // Find the latest active/scheduled consultation for each distinct doctor
       query = `
         SELECT c.id as consultation_id, c.scheduled_at, c.status,
                u.id as other_user_id, u.name as other_user_name, u.email as other_user_email,
-               (SELECT content FROM messages WHERE consultation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
-               (SELECT created_at FROM messages WHERE consultation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time
+               (SELECT content FROM messages WHERE consultation_id = c.id AND created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 1) as last_message,
+               (SELECT created_at FROM messages WHERE consultation_id = c.id AND created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 1) as last_message_time
         FROM consultations c
         JOIN users u ON c.doctor_id = u.id
         WHERE c.customer_id = ?
-        ORDER BY last_message_time DESC, c.scheduled_at DESC
+          AND c.id = (
+            SELECT c2.id
+            FROM consultations c2
+            WHERE c2.customer_id = c.customer_id AND c2.doctor_id = c.doctor_id
+            ORDER BY COALESCE(
+              (SELECT created_at FROM messages WHERE consultation_id = c2.id AND created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 1),
+              c2.scheduled_at
+            ) DESC
+            LIMIT 1
+          )
+        ORDER BY COALESCE(last_message_time, c.scheduled_at) DESC
       `;
     }
 
@@ -70,11 +108,13 @@ router.get("/consultation/:consultationId", authenticateToken, async (req, res) 
       return res.status(403).json({ error: "Unauthorized access to this chat session" });
     }
 
+    // Load only messages created within the last 7 days
     const messages = await db.all(
       `SELECT m.*, u.name as sender_name 
        FROM messages m
        LEFT JOIN users u ON m.sender_id = u.id
        WHERE m.consultation_id = ?
+         AND m.created_at >= datetime('now', '-7 days')
        ORDER BY m.created_at ASC`,
       [consultationId]
     );

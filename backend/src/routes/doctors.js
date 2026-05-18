@@ -27,7 +27,9 @@ router.get('/', async (req, res) => {
         d.consultation_fee,
         d.license_number,
         d.verified,
-        d.bio
+        d.bio,
+        d.certifications,
+        d.working_hours
       FROM users u
       INNER JOIN doctors d ON u.id = d.id
       WHERE u.role = 'doctor'
@@ -55,12 +57,30 @@ router.get('/', async (req, res) => {
     // Parse JSON fields
     const formattedDoctors = doctors.map(doc => {
       let languages = ['English'];
+      let certifications = [];
+      let working_hours = {};
       try {
         if (doc.languages && doc.languages !== '[object Object]') {
           languages = JSON.parse(doc.languages);
         }
       } catch (e) {
         console.warn(`Invalid JSON in languages for doctor ${doc.id}:`, doc.languages);
+      }
+
+      try {
+        if (doc.certifications && doc.certifications !== '[object Object]') {
+          certifications = JSON.parse(doc.certifications);
+        }
+      } catch (e) {
+        console.warn(`Invalid JSON in certifications for doctor ${doc.id}:`, doc.certifications);
+      }
+
+      try {
+        if (doc.working_hours && doc.working_hours !== '[object Object]') {
+          working_hours = JSON.parse(doc.working_hours);
+        }
+      } catch (e) {
+        console.warn(`Invalid JSON in working_hours for doctor ${doc.id}:`, doc.working_hours);
       }
 
       return {
@@ -77,7 +97,9 @@ router.get('/', async (req, res) => {
         consultation_fee: doc.consultation_fee || 0,
         license_number: doc.license_number,
         verified: doc.verified === 1,
-        bio: doc.bio
+        bio: doc.bio,
+        certifications,
+        working_hours
       };
     });
 
@@ -201,14 +223,10 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-/**
- * Update doctor availability (Manager or the Doctor themselves)
- * PATCH /api/doctors/:id
- */
-router.patch('/:id', authenticateToken, async (req, res) => {
+const updateDoctorHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const { available, rating, consultation_fee, bio, specialization, experience } = req.body;
+    const { available, rating, consultation_fee, bio, specialization, experience, working_hours } = req.body;
 
     // Check if doctor exists
     const doctor = await db.get("SELECT * FROM doctors WHERE id = ?", [id]);
@@ -249,6 +267,10 @@ router.patch('/:id', authenticateToken, async (req, res) => {
       updates.push("experience = ?");
       params.push(experience);
     }
+    if (working_hours !== undefined) {
+      updates.push("working_hours = ?");
+      params.push(typeof working_hours === 'string' ? working_hours : JSON.stringify(working_hours));
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: "No fields to update" });
@@ -266,7 +288,10 @@ router.patch('/:id', authenticateToken, async (req, res) => {
     console.error('Error updating doctor:', error);
     res.status(500).json({ error: 'Failed to update doctor' });
   }
-});
+};
+
+router.patch('/:id', authenticateToken, updateDoctorHandler);
+router.put('/:id', authenticateToken, updateDoctorHandler);
 
 /**
  * Delete a doctor (Manager only)
