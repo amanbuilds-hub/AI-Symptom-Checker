@@ -83,10 +83,28 @@ const ManagerDashboard: React.FC = () => {
           analyticsAPI.getSpecializations()
         ]);
 
-        if (statsRes.data) setStats(statsRes.data);
-        if (trendsRes.data) setTrends(trendsRes.data);
-        if (rolesRes.data) setRoles(rolesRes.data);
-        if (specsRes.data) setSpecializations(specsRes.data);
+        if (statsRes.data) {
+          const actualStats = (statsRes.data as any).data || statsRes.data;
+          setStats({
+            totalUsers: actualStats.totalUsers || 0,
+            activeDoctors: actualStats.activeDoctors || 0,
+            consultationsToday: actualStats.consultationsToday || 0,
+            completedConsultations: actualStats.completedConsultations || 0,
+            revenue: actualStats.revenue || 0
+          });
+        }
+        if (trendsRes.data) {
+          const actualTrends = (trendsRes.data as any).data || trendsRes.data;
+          setTrends(Array.isArray(actualTrends) ? actualTrends : []);
+        }
+        if (rolesRes.data) {
+          const actualRoles = (rolesRes.data as any).data || rolesRes.data;
+          setRoles(Array.isArray(actualRoles) ? actualRoles : []);
+        }
+        if (specsRes.data) {
+          const actualSpecs = (specsRes.data as any).data || specsRes.data;
+          setSpecializations(Array.isArray(actualSpecs) ? actualSpecs : []);
+        }
       } catch (error) {
         console.error("Error loading platform analytics:", error);
       } finally {
@@ -106,57 +124,7 @@ const ManagerDashboard: React.FC = () => {
     { label: 'Total Revenue', value: `₹${stats.revenue.toLocaleString()}`, change: 'Completed', icon: DollarSign, color: 'text-yellow-600' }
   ];
 
-  const recentActivities = [
-    {
-      id: '1',
-      type: 'doctor_registration',
-      message: 'Dr. Amit Sharma registered as a new doctor',
-      time: '2 hours ago',
-      status: 'pending'
-    },
-    {
-      id: '2',
-      type: 'consultation_completed',
-      message: '156 consultations completed today',
-      time: '4 hours ago',
-      status: 'success'
-    },
-    {
-      id: '3',
-      type: 'system_alert',
-      message: 'Server response time increased by 15%',
-      time: '6 hours ago',
-      status: 'warning'
-    }
-  ];
-
-  const doctorRequests = [
-    {
-      id: '1',
-      name: 'Dr. Priya Verma',
-      specialization: 'Cardiology',
-      experience: '8 years',
-      location: 'Mumbai',
-      status: 'pending',
-      documents: 'Complete'
-    },
-    {
-      id: '2',
-      name: 'Dr. Rajesh Gupta',
-      specialization: 'Pediatrics',
-      experience: '12 years',
-      location: 'Delhi',
-      status: 'pending',
-      documents: 'Incomplete'
-    }
-  ];
-
-  const regionalData = [
-    { region: 'North India', patients: 3456, doctors: 89, consultations: 1234 },
-    { region: 'South India', patients: 2890, doctors: 76, consultations: 987 },
-    { region: 'West India', patients: 2345, doctors: 65, consultations: 876 },
-    { region: 'East India', patients: 1876, doctors: 54, consultations: 654 }
-  ];
+  // Static data removed
 
   const handleScheduleAppointment = () => {
     if (!appointmentForm.doctorId || !appointmentForm.scheduledAt) {
@@ -235,59 +203,6 @@ const ManagerDashboard: React.FC = () => {
         })}
       </div>
 
-      {/* Regional Performance */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Regional Performance</h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-2 text-sm font-medium text-gray-600">Region</th>
-                <th className="text-left py-2 text-sm font-medium text-gray-600">Patients</th>
-                <th className="text-left py-2 text-sm font-medium text-gray-600">Doctors</th>
-                <th className="text-left py-2 text-sm font-medium text-gray-600">Consultations</th>
-              </tr>
-            </thead>
-            <tbody>
-              {regionalData.map((region, index) => (
-                <tr key={index} className="border-b border-gray-100">
-                  <td className="py-3 text-sm font-medium text-gray-900">{region.region}</td>
-                  <td className="py-3 text-sm text-gray-600">{region.patients.toLocaleString()}</td>
-                  <td className="py-3 text-sm text-gray-600">{region.doctors}</td>
-                  <td className="py-3 text-sm text-gray-600">{region.consultations.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* Recent Activities */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activities</h3>
-        <div className="space-y-4">
-          {recentActivities.map((activity) => (
-            <div key={activity.id} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
-              <div className={`p-2 rounded-full ${
-                activity.status === 'success' ? 'bg-green-100' :
-                activity.status === 'warning' ? 'bg-yellow-100' : 'bg-blue-100'
-              }`}>
-                {activity.status === 'success' ? (
-                  <CheckCircle className="text-green-600" size={16} />
-                ) : activity.status === 'warning' ? (
-                  <AlertTriangle className="text-yellow-600" size={16} />
-                ) : (
-                  <Clock className="text-blue-600" size={16} />
-                )}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">{activity.message}</p>
-                <p className="text-xs text-gray-500">{activity.time}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 
@@ -376,42 +291,6 @@ const ManagerDashboard: React.FC = () => {
         </Card>
       )}
 
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Doctor Verification Requests</h3>
-          <Button size="sm">View All</Button>
-        </div>
-        <div className="space-y-4">
-          {doctorRequests.map((doctor) => (
-            <div key={doctor.id} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h4 className="font-medium text-gray-900">{doctor.name}</h4>
-                  <p className="text-sm text-gray-600">{doctor.specialization} • {doctor.experience}</p>
-                  <div className="flex items-center mt-1">
-                    <MapPin size={14} className="text-gray-400 mr-1" />
-                    <span className="text-sm text-gray-500">{doctor.location}</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                    doctor.documents === 'Complete' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {doctor.documents}
-                  </span>
-                </div>
-              </div>
-              <div className="flex space-x-2">
-                <Button size="sm" variant="secondary">Review Documents</Button>
-                <Button size="sm" variant="ghost">Reject</Button>
-                <Button size="sm">Approve</Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 
@@ -550,24 +429,6 @@ const ManagerDashboard: React.FC = () => {
               )}
             </Card>
 
-            {/* Platform Metrics */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Platform Vitals</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">99.9%</div>
-                  <p className="text-sm text-gray-650 dark:text-gray-450">System Uptime</p>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">1.8s</div>
-                  <p className="text-sm text-gray-655 dark:text-gray-450">Avg DB Response</p>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-purple-600 dark:text-purple-400 mb-2">4.9/5</div>
-                  <p className="text-sm text-gray-660 dark:text-gray-450">User Satisfaction</p>
-                </div>
-              </div>
-            </Card>
           </>
         )}
       </div>
