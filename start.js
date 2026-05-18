@@ -22,6 +22,7 @@ const backend = spawn("npm", ["run", "dev"], {
 setTimeout(() => {
   console.log("\n🎨 Starting frontend server...");
   const frontend = spawn("npm", ["run", "dev"], {
+    cwd: path.join(__dirname, "frontend"),
     stdio: "inherit",
     shell: true,
   });

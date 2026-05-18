@@ -72,13 +72,16 @@ The backend will be running on `http://localhost:5000`
 ### 1. Install Dependencies
 
 ```bash
-# From project root
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
 npm install
 ```
 
 ### 2. Update Environment Variables
 
-The `.env` file has been updated to use the new backend:
+The `frontend/.env` file has been updated to use the new backend:
 
 ```env
 # Backend API Configuration
@@ -91,10 +94,24 @@ VITE_GOOGLE_AI_API_KEY=AIzaSyCiOAeaaZKWkhIE8Mng8eo1qY-ksHXs-_o
 ### 3. Start Frontend
 
 ```bash
+# From frontend directory
 npm run dev
 ```
 
 The frontend will be running on `http://localhost:5173`
+
+## Running Both Backend and Frontend Together
+
+You can start both frontend and backend concurrently from the project root directory:
+
+1. Install root and nested dependencies:
+   ```bash
+   npm run install:all
+   ```
+2. Start all services:
+   ```bash
+   npm run start:all
+   ```
 
 ## Testing the Setup
 
@@ -193,7 +210,7 @@ npx kill-port 5000
 cd backend && npm run dev
 
 # Restart frontend (in new terminal)
-npm run dev
+cd frontend && npm run dev
 ```
 
 **Reset database:**
